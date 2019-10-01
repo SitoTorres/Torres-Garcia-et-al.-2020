@@ -37,7 +37,7 @@ workflow chipseq_pipeline_sito_20190322 {
 
 	call FastQC {
 
-		input:
+	input:
 	        inputR1 = sample[1],
 	        inputR2 = sample[2],
 	    }
@@ -52,7 +52,7 @@ workflow chipseq_pipeline_sito_20190322 {
 	call trimmomatic {
 
 		input:
-			inputR1 = sample[1],
+		inputR1 = sample[1],
 	        inputR2 = sample[2],
 	        sampleName = sample[0],
 		}
@@ -124,7 +124,7 @@ workflow chipseq_pipeline_sito_20190322 {
 
     call BQRS_recal {
 		input:
-		  	sampleName = sample[0], 
+		sampleName = sample[0], 
 	      	GATK = gatk, 
 	      	RefFasta = refFasta, 
 	      	RefIndex = refIndex, 
@@ -234,10 +234,10 @@ workflow chipseq_pipeline_sito_20190322 {
 			File inputR2
 			
 			command {
-				/Users/sitotorresgarcia/Desktop/Genome_Tools/FastQC/fastqc \
+				/path/fastqc \
 				${inputR1} \
 				${inputR2} \
-				-o /Users/sitotorresgarcia/Desktop/FastQC_Reports/ 
+				-o /path/FastQC_Reports/ 
 			}
 
 			output {}
@@ -250,11 +250,11 @@ workflow chipseq_pipeline_sito_20190322 {
 			File inputR2
 
 			command {
-				/Users/sitotorresgarcia/Desktop/Genome_Tools/fastq_screen_v0.11.2/fastq_screen \
-				-conf /Users/sitotorresgarcia/Desktop/Genome_Tools/fastq_screen_v0.11.2/fastq_screen_new_local.conf \
+				/path/fastq_screen \
+				-conf /path/fastq_screen_v0.11.2/fastq_screen_new_local.conf \
 				${inputR1} \
 				${inputR2} \
-				--outdir /Users/sitotorresgarcia/Desktop/Fastq_screen_Reports/ 
+				--outdir /path/Fastq_screen_Reports/ 
 
 			}
 
@@ -270,14 +270,14 @@ workflow chipseq_pipeline_sito_20190322 {
 
 			command {
 
-				java -jar /Users/sitotorresgarcia/Desktop/Genome_Tools/Trimmomatic/Trimmomatic-0.36/trimmomatic-0.36.jar PE \
+				java -jar /path/trimmomatic-0.36.jar PE \
 				${inputR1} \
 				${inputR2} \
 				${sampleName}_F_paired.fastq.gz \
 				${sampleName}_F_unpaired.fastq.gz \
 				${sampleName}_R_paired.fastq.gz \
 				${sampleName}_R_unpaired.fastq.gz \
-				ILLUMINACLIP:/Users/sitotorresgarcia/Desktop/Genome_Tools/Trimmomatic/Trimmomatic-0.36/adapters/TruSeq3-PE.fa:2:30:10 \
+				ILLUMINACLIP:/path/Trimmomatic-0.36/adapters/TruSeq3-PE.fa:2:30:10 \
 				SLIDINGWINDOW:4:20 MINLEN:20
 			}
 
@@ -295,8 +295,8 @@ workflow chipseq_pipeline_sito_20190322 {
 			String sampleName
 
 			command {
-				/Users/sitotorresgarcia/Desktop/Genome_Tools/bowtie2-2.3.3/bowtie2 \
-				-x /Users/sitotorresgarcia/Desktop/Genome_Tools/bowtie2-2.3.3/bowtie2_indexes/pombe_ASM294v2.20 \
+				/path/bowtie2 \
+				-x /path/bowtie2_indexes/pombe_ASM294v2.20 \
 				-1 ${forward} \
 				-2 ${reverse} \
 				-S ${sampleName}_Bowtie2.sam
@@ -315,7 +315,7 @@ workflow chipseq_pipeline_sito_20190322 {
 			String sampleName
 
 			command {
-				/Users/sitotorresgarcia/Desktop/Genome_Tools/samtools-1.5/samtools view -bS ${Bowtie2_sam} > ${sampleName}_Bowtie2.bam
+				/path/samtools view -bS ${Bowtie2_sam} > ${sampleName}_Bowtie2.bam
 			}
 
 			output {
@@ -330,7 +330,7 @@ workflow chipseq_pipeline_sito_20190322 {
 			String sampleName
 
 			command {
-				/Users/sitotorresgarcia/Desktop/Genome_Tools/samtools-1.5/samtools sort ${Bowtie2_bam} -o ${sampleName}_Bowtie2_sorted.bam
+				/path/samtools sort ${Bowtie2_bam} -o ${sampleName}_Bowtie2_sorted.bam
 			}
 
 			output {
@@ -345,7 +345,7 @@ workflow chipseq_pipeline_sito_20190322 {
 			String sampleName
 
 			command {
-				java -jar /Users/sitotorresgarcia/Desktop/Genome_Tools/picard.jar FixMateInformation USE_JDK_DEFLATER=TRUE \
+				java -jar /path/picard.jar FixMateInformation USE_JDK_DEFLATER=TRUE \
 				I=${Bowtie2_sorted_bam} \
 				O=${sampleName}_Bowtie2_sorted_fixedmate.bam
 			}
@@ -363,7 +363,7 @@ workflow chipseq_pipeline_sito_20190322 {
 			String sampleName
 
 			command {
-				java -jar /Users/sitotorresgarcia/Desktop/Genome_Tools/picard.jar AddOrReplaceReadGroups USE_JDK_DEFLATER=TRUE \
+				java -jar /path/picard.jar AddOrReplaceReadGroups USE_JDK_DEFLATER=TRUE \
 				I=${Bowtie2_sorted_fixedmate_bam} \
 				O=${sampleName}_Bowtie2_sorted_fixedmate_ginfo.bam RGID=${sampleName} RGLB="lib1" RGPL="illumina" RGPU="NFx" RGSM=${sampleName}
 			}
@@ -380,7 +380,7 @@ workflow chipseq_pipeline_sito_20190322 {
 			String sampleName
 
 			command {
-				java -jar /Users/sitotorresgarcia/Desktop/Genome_Tools/picard.jar MarkDuplicates USE_JDK_DEFLATER=TRUE \
+				java -jar /path/picard.jar MarkDuplicates USE_JDK_DEFLATER=TRUE \
 				I=${Bowtie2_sorted_fixedmate_ginfo_bam} \
 				O=${sampleName}_Bowtie2_sorted_fixedmate_ginfo_nodup.bam \
 				M=${sampleName}_Bowtie2_sorted_fixedmate_ginfo_nodup.txt \
@@ -418,7 +418,7 @@ workflow chipseq_pipeline_sito_20190322 {
 
 			command {
 
-			java -jar /Users/sitotorresgarcia/Desktop/Genome_Tools/picard.jar MarkDuplicates USE_JDK_DEFLATER=TRUE \
+			java -jar /path/picard.jar MarkDuplicates USE_JDK_DEFLATER=TRUE \
 				I=${Bowtie2_sorted_fixedmate_ginfo_bam} \
 				O=${sampleName}_Bowtie2_sorted_fixedmate_ginfo_markdup.bam \
 				M=${sampleName}_Bowtie2_sorted_fixedmate_ginfo_markdup.txt \
