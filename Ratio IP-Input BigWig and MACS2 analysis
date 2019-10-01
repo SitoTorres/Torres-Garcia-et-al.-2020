@@ -14,7 +14,7 @@ workflow bamCompare_MACS2_pipeline_sito_20190411 {
 	call bamcompare_ratio_SES {
 
 		input:
-			sampleName = sample[0],
+		sampleName = sample[0],
 	        IP_bam = sample[1],
 	        IP_bai = sample[2],
 	        input_bam = sample[3],
