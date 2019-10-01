@@ -1,1 +1,703 @@
+workflow chipseq_pipeline_sito_for_paper_20190322 {
+	
+	# input_array: [0] name, [1] R1.fastq.gz, [2] R2.fastq.gz
 
+	File input_array
+	File gatk
+	File refFasta
+	File refIndex
+	File refDict
+
+	Array[Array[File]]   inputSamples  = read_tsv(input_array)
+
+	scatter  (sample in inputSamples) {
+
+	# 1 = FastQC
+	# 2 = Fastq_screen
+	# 3 = trimmomatic
+	# 4 = bowtie2_aligner
+	# 5 = samtools = sam to bam (sam_to_bam)
+	# 6 = samtools = sort bam (sorting_bam)
+	# 7 = Picard = Fix mate (fix_mate)
+	# 8 = Picard = Add Read Group (add_read_group)
+	# 9 = Picard = Remove duplicates and create index (remove_dup_and_index)
+	# 10 = BamCoverage = Coverage (coverage)
+	# 11 = Picard = Mark duplicates and create index (mark_dup_and_index)
+	# 12 = BQRS_table = BQRS_table
+	# 13 = BQRS_recal using table from #12 = BQRS_recal
+	# 14 = haplotypeCaller = haplotypeCaller
+	# 15 = selectSNPs = selectSNPs
+	# 16 = hardFilterSNP = hardFilterSNP
+	# 17 = selectIndels = selectIndels
+	# 18 = hardFilterIndel = hardFilterIndel
+	# 19 = CombineSNPs = CombineSNPs
+	# 21 = CompareSNPs = CompareSNPs
+	# 22 = CombineINDELs = CombineINDELs
+	# 23 = CompareINDELs = CompareINDELs
+
+	call FastQC {
+
+		input:
+	        inputR1 = sample[1],
+	        inputR2 = sample[2],
+	    }
+
+    call Fastq_screen {
+
+    	input:
+    		inputR1 = sample[1],
+	        inputR2 = sample[2],
+		}
+
+	call trimmomatic {
+
+		input:
+			inputR1 = sample[1],
+	        inputR2 = sample[2],
+	        sampleName = sample[0],
+		}
+
+	call bowtie2_aligner {
+
+		input:
+			forward = trimmomatic.F_trimmed,
+			reverse = trimmomatic.R_trimmed,
+			sampleName = sample[0],
+		}
+
+	call sam_to_bam {
+
+		input:
+			Bowtie2_sam = bowtie2_aligner.bowtie2_sam,
+			sampleName = sample[0],
+
+		}	
+
+	call sorting_bam {
+	
+		input:
+			Bowtie2_bam = sam_to_bam.bowtie2_bam,
+			sampleName = sample[0],
+		}
+
+	call fix_mate {
+		input:
+			Bowtie2_sorted_bam = sorting_bam.sorted_bam,
+			sampleName = sample[0],
+		}	
+
+	call add_read_group {
+		input:
+			Bowtie2_sorted_fixedmate_bam = fix_mate.sorted_fixedmate_bam,
+			sampleName = sample[0],
+		}
+
+	call remove_dup_and_index {
+		input:
+			Bowtie2_sorted_fixedmate_ginfo_bam = add_read_group.sorted_fixedmate_ginfo_bam,
+			sampleName = sample[0],
+		}
+
+	call coverage {
+		input:
+			Bowtie2_sorted_fixedmate_ginfo_nodup_bam = remove_dup_and_index.sorted_fixedmate_ginfo_nodup_bam,
+			Bowtie2_sorted_fixedmate_ginfo_nodup_bai = remove_dup_and_index.sorted_fixedmate_ginfo_nodup_bai,
+			sampleName = sample[0],
+		}
+
+	call mark_dup_and_index {
+		input:
+			Bowtie2_sorted_fixedmate_ginfo_bam = add_read_group.sorted_fixedmate_ginfo_bam,
+			sampleName = sample[0],
+		}
+
+	call BQRS_table {
+		input:
+			sampleName = sample[0],
+			GATK = gatk, 
+			RefFasta = refFasta, 
+	        RefIndex = refIndex, 
+	        RefDict = refDict, 
+	        inputBAM = mark_dup_and_index.sorted_fixedmate_ginfo_markdup_bam,
+	        inputBAMindex = mark_dup_and_index.sorted_fixedmate_ginfo_markdup_bai,
+	    }
+
+    call BQRS_recal {
+		input:
+		  	sampleName = sample[0], 
+	      	GATK = gatk, 
+	      	RefFasta = refFasta, 
+	      	RefIndex = refIndex, 
+	      	RefDict = refDict,
+	      	inputBAM = mark_dup_and_index.sorted_fixedmate_ginfo_markdup_bam,
+	      	inputBAMindex = mark_dup_and_index.sorted_fixedmate_ginfo_markdup_bai,
+	      	recal_table=BQRS_table.Table,
+	  	}
+
+	call haplotypeCaller {
+	    input: 
+		    sampleName = sample[0], 
+		    RefFasta=refFasta, 
+		    GATK=gatk, 
+		    RefIndex=refIndex, 
+		    RefDict=refDict,
+		    recal_bam=BQRS_recal.recal_bam,
+		    recal_bai=BQRS_recal.recal_bai
+		}
+
+	call selectSNPs {
+    	input: 
+	       	sampleName = sample[0], 
+	       	RefFasta=refFasta, 
+	       	GATK=gatk, 
+	       	RefIndex=refIndex, 
+	       	RefDict=refDict, 
+	       	rawVCF=haplotypeCaller.rawVCF
+	  	}
+
+    call hardFilterSNP {
+		input:
+		  	sampleName = sample[0],
+		  	RefFasta=refFasta, 
+	      	GATK=gatk, 
+	      	RefIndex=refIndex, 
+      		RefDict=refDict,
+		  	rawSNPs=selectSNPs.rawsnps
+		} 
+
+	call selectIndels {
+	    input: 
+	      	sampleName = sample[0], 
+	      	RefFasta=refFasta, 
+	      	GATK=gatk, 
+	      	RefIndex=refIndex, 
+	      	RefDict=refDict,  
+	      	rawVCF=haplotypeCaller.rawVCF
+		}
+
+	call hardFilterIndel {
+		input:
+		  	sampleName = sample[0],
+		  	RefFasta=refFasta, 
+	      	GATK=gatk, 
+	      	RefIndex=refIndex, 
+	      	RefDict=refDict,
+		  	rawIndels=selectIndels.rawindels
+		}
+
+	call CombineSNPs {
+		input:
+		  	sampleName = sample[0],
+		  	RefFasta=refFasta, 
+	      	GATK=gatk, 
+	      	RefIndex=refIndex, 
+	      	RefDict=refDict,
+	      	filteredsnps=hardFilterSNP.filteredSNPs
+		}	
+
+	call CompareSNPs {
+		input:
+			sampleName = sample[0],
+		  	RefFasta=refFasta, 
+	      	GATK=gatk, 
+	      	RefIndex=refIndex, 
+	      	RefDict=refDict,
+	      	Joint_snps=CombineSNPs.joint_snps
+		}
+
+	call CombineINDELs {
+		input:
+		  	sampleName = sample[0],
+		  	RefFasta=refFasta, 
+	      	GATK=gatk, 
+	      	RefIndex=refIndex, 
+	      	RefDict=refDict,
+		  	filteredindels=hardFilterIndel.filteredIndels	
+		}
+
+	call CompareINDELs {
+		input:
+		  	sampleName = sample[0],
+		  	RefFasta=refFasta, 
+	      	GATK=gatk, 
+	      	RefIndex=refIndex, 
+	      	RefDict=refDict,
+	      	Joint_indels=CombineINDELs.joint_indels
+	  	}
+	}	
+}
+	
+
+	    task FastQC {
+			
+			File inputR1
+			File inputR2
+			
+			command {
+				/Users/sitotorresgarcia/Desktop/Genome_Tools/FastQC/fastqc \
+				${inputR1} \
+				${inputR2} \
+				-o /Users/sitotorresgarcia/Desktop/FastQC_Reports/ 
+			}
+
+			output {}
+
+			}	
+
+		task Fastq_screen {
+
+			File inputR1
+			File inputR2
+
+			command {
+				/Users/sitotorresgarcia/Desktop/Genome_Tools/fastq_screen_v0.11.2/fastq_screen \
+				-conf /Users/sitotorresgarcia/Desktop/Genome_Tools/fastq_screen_v0.11.2/fastq_screen_new_local.conf \
+				${inputR1} \
+				${inputR2} \
+				--outdir /Users/sitotorresgarcia/Desktop/Fastq_screen_Reports/ 
+
+			}
+
+			output {}
+			
+			}
+
+		task trimmomatic {
+
+			File inputR1
+			File inputR2
+			String sampleName
+
+			command {
+
+				java -jar /Users/sitotorresgarcia/Desktop/Genome_Tools/Trimmomatic/Trimmomatic-0.36/trimmomatic-0.36.jar PE \
+				${inputR1} \
+				${inputR2} \
+				${sampleName}_F_paired.fastq.gz \
+				${sampleName}_F_unpaired.fastq.gz \
+				${sampleName}_R_paired.fastq.gz \
+				${sampleName}_R_unpaired.fastq.gz \
+				ILLUMINACLIP:/Users/sitotorresgarcia/Desktop/Genome_Tools/Trimmomatic/Trimmomatic-0.36/adapters/TruSeq3-PE.fa:2:30:10 \
+				SLIDINGWINDOW:4:20 MINLEN:20
+			}
+
+			output {
+
+				File F_trimmed = "${sampleName}_F_paired.fastq.gz"
+				File R_trimmed = "${sampleName}_R_paired.fastq.gz"
+			}
+		}
+
+		task bowtie2_aligner {
+
+			File forward
+			File reverse
+			String sampleName
+
+			command {
+				/Users/sitotorresgarcia/Desktop/Genome_Tools/bowtie2-2.3.3/bowtie2 \
+				-x /Users/sitotorresgarcia/Desktop/Genome_Tools/bowtie2-2.3.3/bowtie2_indexes/pombe_ASM294v2.20 \
+				-1 ${forward} \
+				-2 ${reverse} \
+				-S ${sampleName}_Bowtie2.sam
+			}
+
+			output {
+				
+				File bowtie2_sam = "${sampleName}_Bowtie2.sam"
+			}
+		}
+
+
+		task sam_to_bam {
+
+			File Bowtie2_sam
+			String sampleName
+
+			command {
+				/Users/sitotorresgarcia/Desktop/Genome_Tools/samtools-1.5/samtools view -bS ${Bowtie2_sam} > ${sampleName}_Bowtie2.bam
+			}
+
+			output {
+
+				File bowtie2_bam = "${sampleName}_Bowtie2.bam"
+			}
+		}
+
+		task sorting_bam {
+
+			File Bowtie2_bam
+			String sampleName
+
+			command {
+				/Users/sitotorresgarcia/Desktop/Genome_Tools/samtools-1.5/samtools sort ${Bowtie2_bam} -o ${sampleName}_Bowtie2_sorted.bam
+			}
+
+			output {
+
+				File sorted_bam = "${sampleName}_Bowtie2_sorted.bam"
+			}
+		}
+
+		task fix_mate {
+			
+			File Bowtie2_sorted_bam
+			String sampleName
+
+			command {
+				java -jar /Users/sitotorresgarcia/Desktop/Genome_Tools/picard.jar FixMateInformation USE_JDK_DEFLATER=TRUE \
+				I=${Bowtie2_sorted_bam} \
+				O=${sampleName}_Bowtie2_sorted_fixedmate.bam
+			}
+
+			output {
+
+				File sorted_fixedmate_bam = "${sampleName}_Bowtie2_sorted_fixedmate.bam"
+			}
+		}
+	
+
+		task add_read_group {
+
+			File Bowtie2_sorted_fixedmate_bam
+			String sampleName
+
+			command {
+				java -jar /Users/sitotorresgarcia/Desktop/Genome_Tools/picard.jar AddOrReplaceReadGroups USE_JDK_DEFLATER=TRUE \
+				I=${Bowtie2_sorted_fixedmate_bam} \
+				O=${sampleName}_Bowtie2_sorted_fixedmate_ginfo.bam RGID=${sampleName} RGLB="lib1" RGPL="illumina" RGPU="NFx" RGSM=${sampleName}
+			}
+
+			output {
+
+				File sorted_fixedmate_ginfo_bam = "${sampleName}_Bowtie2_sorted_fixedmate_ginfo.bam"
+			}
+		}
+
+		task remove_dup_and_index {
+			
+			File Bowtie2_sorted_fixedmate_ginfo_bam
+			String sampleName
+
+			command {
+				java -jar /Users/sitotorresgarcia/Desktop/Genome_Tools/picard.jar MarkDuplicates USE_JDK_DEFLATER=TRUE \
+				I=${Bowtie2_sorted_fixedmate_ginfo_bam} \
+				O=${sampleName}_Bowtie2_sorted_fixedmate_ginfo_nodup.bam \
+				M=${sampleName}_Bowtie2_sorted_fixedmate_ginfo_nodup.txt \
+				ASSUME_SORTED=true REMOVE_DUPLICATES=true CREATE_INDEX=true
+			}
+
+			output {
+
+				File sorted_fixedmate_ginfo_nodup_bam = "${sampleName}_Bowtie2_sorted_fixedmate_ginfo_nodup.bam"
+				File sorted_fixedmate_ginfo_nodup_bai = "${sampleName}_Bowtie2_sorted_fixedmate_ginfo_nodup.bai"
+			}
+		}
+
+			task coverage {
+
+			File Bowtie2_sorted_fixedmate_ginfo_nodup_bam
+			File Bowtie2_sorted_fixedmate_ginfo_nodup_bai
+			String sampleName
+
+			command {
+				
+				bamCoverage -b ${Bowtie2_sorted_fixedmate_ginfo_nodup_bam} -o ${sampleName}.bw -bs 50 --normalizeUsingRPKM
+			}
+
+			output {
+
+				File bamcoverage = "${sampleName}.bw"
+			}
+		}
+
+			task mark_dup_and_index {
+
+			File Bowtie2_sorted_fixedmate_ginfo_bam
+			String sampleName
+
+			command {
+
+			java -jar /Users/sitotorresgarcia/Desktop/Genome_Tools/picard.jar MarkDuplicates USE_JDK_DEFLATER=TRUE \
+				I=${Bowtie2_sorted_fixedmate_ginfo_bam} \
+				O=${sampleName}_Bowtie2_sorted_fixedmate_ginfo_markdup.bam \
+				M=${sampleName}_Bowtie2_sorted_fixedmate_ginfo_markdup.txt \
+				ASSUME_SORTED=true CREATE_INDEX=true
+			}
+
+			output {
+
+				File sorted_fixedmate_ginfo_markdup_bam = "${sampleName}_Bowtie2_sorted_fixedmate_ginfo_markdup.bam"
+				File sorted_fixedmate_ginfo_markdup_bai = "${sampleName}_Bowtie2_sorted_fixedmate_ginfo_markdup.bai"
+			}
+		}
+
+			task BQRS_table {
+
+			File GATK 
+			File RefFasta
+			File RefIndex
+			File RefDict
+			File inputBAM
+			File inputBAMindex
+			File known_snps
+			File known_indels
+			String sampleName
+
+			command {
+
+				java -jar ${GATK} \
+				-T BaseRecalibrator \
+				-R ${RefFasta} \
+				-I ${inputBAM} \
+				-knownSites ${known_snps} \
+				-knownSites ${known_indels} \
+				-o ${sampleName}.table \
+			}
+
+			output {
+
+				File Table = "${sampleName}.table"
+			}
+		}
+
+			task BQRS_recal {
+			File GATK
+			File RefFasta
+			File RefIndex
+			File RefDict
+			File inputBAM
+			File inputBAMindex
+			File recal_table
+			String sampleName
+
+			command {
+
+				java -jar ${GATK} \
+				-T PrintReads \
+				-R ${RefFasta} \
+				-I ${inputBAM} \
+				-BQSR ${recal_table} \
+				-o ${sampleName}.recal_reads.bam
+			}
+
+			output {
+
+				File recal_bam = "${sampleName}.recal_reads.bam"
+				File recal_bai = "${sampleName}.recal_reads.bai"
+			}
+		}
+
+
+		task haplotypeCaller {
+			File GATK
+			File RefFasta
+			File RefIndex
+			File RefDict
+			File recal_bam
+			File recal_bai
+			String ploidy_number
+			String sampleName
+
+			command {
+
+				java -jar ${GATK} \
+				-T HaplotypeCaller \
+				-R ${RefFasta} \
+				-I ${recal_bam} \
+				-ploidy ${ploidy_number} \
+				-o ${sampleName}.raw_snps_indels.vcf \
+
+			}
+			output {
+
+				File rawVCF = "${sampleName}.raw_snps_indels.vcf"
+			}
+		}
+
+		task selectSNPs {
+			  File GATK
+			  File RefFasta
+			  File RefIndex
+			  File RefDict
+			  String sampleName
+			  File rawVCF
+
+			  command {
+
+			    java -jar ${GATK} \
+			    -T SelectVariants \
+			    -R ${RefFasta} \
+			    -V ${rawVCF} \
+			    -selectType SNP \
+			    -o ${sampleName}_raw_snps.vcf
+			  }
+
+			  output {
+
+			    File rawsnps = "${sampleName}_raw_snps.vcf"
+			}
+		}
+
+
+		task hardFilterSNP {
+			  File GATK
+			  File RefFasta
+			  File RefIndex
+			  File RefDict
+			  String sampleName
+			  File rawSNPs
+
+			  command {
+				  java -jar ${GATK} \
+			      -T VariantFiltration \
+			      -R ${RefFasta} \
+			      -V ${rawSNPs} \
+			      --filterExpression "QD < 2.5 || FS > 60.0 || MQ < 40.0 || MQRankSum < -12.5 || ReadPosRankSum < -8.0" \
+			      --filterName "snp_filter" \
+			      -o ${sampleName}.snps_filtered.vcf
+				  }
+
+			  output {
+
+			  	File filteredSNPs = "${sampleName}.snps_filtered.vcf"
+			}
+		}
+
+		task selectIndels {
+			  File GATK
+			  File RefFasta
+			  File RefIndex
+			  File RefDict
+			  String sampleName
+			  File rawVCF
+
+			  command {
+			    java -jar ${GATK} \
+			    -T SelectVariants \
+			    -R ${RefFasta} \
+			    -V ${rawVCF} \
+			    -selectType INDEL \
+			    -o ${sampleName}_raw_indels.vcf
+			  }
+			  output {
+
+			    File rawindels = "${sampleName}_raw_indels.vcf"
+
+			}
+		}
+
+		task hardFilterIndel {
+			  File GATK
+			  File RefFasta
+			  File RefIndex
+			  File RefDict
+			  String sampleName
+			  File rawIndels
+
+			  command {
+				  java -jar ${GATK} \
+			      -T VariantFiltration \
+			      -R ${RefFasta} \
+			      -V ${rawIndels} \
+				  --filterExpression "QD < 2.0 || FS > 200.0 || ReadPosRankSum < -20.0" \
+				  --filterName "my_indel_filter" \
+			      -o ${sampleName}.indels_filtered.vcf
+				 }
+
+			  output {
+
+			  	File filteredIndels = "${sampleName}.indels_filtered.vcf"
+			}
+		}
+
+		task CombineSNPs {
+			File GATK
+			File RefFasta
+			File RefIndex
+			File RefDict
+			String sampleName
+			File filteredsnps
+			File comparison_snps
+
+			command {
+			java -jar ${GATK} \
+		    -T CombineVariants \
+		    -R ${RefFasta} \
+		    -V ${filteredsnps} \
+		    -V ${comparison_snps} \
+		    -o ${sampleName}.joint_snps.vcf
+			}
+
+			output {
+				File joint_snps = "${sampleName}.joint_snps.vcf"
+			}
+		}
+
+		task CompareSNPs {
+			File GATK
+			File RefFasta
+			File RefIndex
+			File RefDict
+			String sampleName
+			File Joint_snps 
+
+			command {
+			java -jar ${GATK} \
+			-T SelectVariants \
+			-R ${RefFasta} \
+			-V ${Joint_snps} \
+			-select 'set == "Intersection"' \
+			--invertselect \
+			-o ${sampleName}.compared_snps.vcf
+			}
+			output {
+				File Compared_SNPs = "${sampleName}.compared_snps.vcf"
+			}
+		}
+
+		task CombineINDELs {
+			File GATK
+			File RefFasta
+			File RefIndex
+			File RefDict
+			String sampleName
+			File filteredindels
+			File comparison_indels
+
+			command {
+			java -jar ${GATK} \
+		    -T CombineVariants \
+		    -R ${RefFasta} \
+		    -V ${filteredindels} \
+		    -V ${comparison_indels} \
+		    -o ${sampleName}.joint_indels.vcf
+			}
+
+			output {
+				File joint_indels = "${sampleName}.joint_indels.vcf"
+			}
+		}
+
+		task CompareINDELs {
+				File GATK
+				File RefFasta
+				File RefIndex
+				File RefDict
+				String sampleName
+				File Joint_indels  # Joint_indels=CombineINDELs.joint_indels
+
+				command {
+				java -jar ${GATK} \
+				-T SelectVariants \
+				-R ${RefFasta} \
+				-V ${Joint_indels} \
+				-select 'set == "Intersection"' \
+				--invertselect \
+				-o ${sampleName}.compared_indels.vcf
+				}
+				
+				output {
+					File Compared_INDELs = "${sampleName}.compared_indels.vcf"
+				}
+			}
