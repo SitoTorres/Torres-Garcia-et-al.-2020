@@ -1,0 +1,82 @@
+workflow bamCompare_MACS2_pipeline_sito_20190411 {
+	
+	# input_array: [0] name, [1] IP.bam, [2] IP.bai, [3] input.bam, [4] input.bai
+
+	File input_array
+
+	Array[Array[File]]   inputSamples  = read_tsv(input_array)
+
+	scatter  (sample in inputSamples) {
+
+	# 1 = bamcompare_ratio_SES, bamcompare ratio SES normalization method
+	# 2 = macs2_PE, MACS2 PE mode so it takes real fragment size
+	
+	call bamcompare_ratio_SES {
+
+		input:
+			sampleName = sample[0],
+	        IP_bam = sample[1],
+	        IP_bai = sample[2],
+	        input_bam = sample[3],
+	        input_bai = sample[4],
+	    }
+
+    call macs2_PE {
+
+    	input:
+    		sampleName = sample[0],
+	        IP_bam = sample[1],
+	        IP_bai = sample[2],
+	        input_bam = sample[3],
+	        input_bai = sample[4],
+		}
+	}
+}
+
+	    task bamcompare_ratio_SES {
+			
+			String sampleName
+			File IP_bam
+			File IP_bai
+			File input_bam
+			File input_bai
+
+			
+			command {
+
+				bamCompare \
+				-b1 ${IP_bam} \
+				-b2 ${input_bam} \
+				-o ${sampleName}_SES.bw \
+				-bs 50 --ratio ratio --scaleFactorsMethod SES
+			}
+
+			output {
+
+				File bw_ratio_SES = "${sampleName}_SES.bw"
+			}
+		}	
+
+		task macs2_PE {
+
+			String sampleName
+			File IP_bam
+			File IP_bai
+			File input_bam
+			File input_bai
+
+			command {
+
+				macs2 callpeak -f BAMPE \
+				-t ${IP_bam} \
+				-c ${input_bam} \
+				--broad -g 14e6 --broad-cutoff 0.05 \
+				-n ${sampleName}
+
+			}
+
+			output {
+
+				File broad_Peaks = "${sampleName}_peaks.broadPeak"
+			}
+		}
