@@ -1,5 +1,3 @@
-# Sito-Paper
-
 Description of pipelines:
 
 - ChIP-Seq + Variation Analysis = WDL + Cromwell pipeline. Takes raw R1 and R2 fastq files as inputs.
